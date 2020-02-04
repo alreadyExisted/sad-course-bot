@@ -1,25 +1,57 @@
-import { Injectable } from '@nestjs/common'
+import { Injectable, Logger } from '@nestjs/common'
 import { ConfigService } from '@nestjs/config'
 import TelegramBot, { ContextMessageUpdate } from 'telegraf'
-import { ParserService } from 'src/parser'
 import { ChatsService } from 'src/chats'
+import { CourseService, Courses, CourseStatus } from 'src/course'
+
+const SAD_COURSE_RATIO = 0.07
+const SAD_COURSE_DELTA = 0.5
 
 @Injectable()
 export class BotService {
+  private logger: Logger
   private bot!: TelegramBot<ContextMessageUpdate>
 
   constructor(
     private configService: ConfigService,
-    private parserService: ParserService,
+    private courseService: CourseService,
     private chatsService: ChatsService
-  ) {}
+  ) {
+    this.logger = new Logger(BotService.name)
+  }
 
   initClient() {
     this.bot = new TelegramBot(
       this.configService.get<string>('TELEGRAM_TOKEN')!
     )
     this.registerCommands()
-    this.bot.launch()
+    this.bot.launch().then(() => this.logger.debug('Init bot client'))
+  }
+
+  async sendNotification(chatId: number, courses: Courses) {
+    if (courses.status === CourseStatus.None) {
+      return false
+    }
+
+    let stickerId: string
+    let msg: string
+
+    switch (courses.status) {
+      case CourseStatus.Up:
+        stickerId = STIKERS.COURSE_UP
+        msg = MESSAGES.COURSE_UP
+      case CourseStatus.Down:
+        stickerId = STIKERS.COURSE_DOWN
+        msg = MESSAGES.COURSE_DOWN
+    }
+
+    await this.bot.telegram.sendSticker(chatId, stickerId)
+    await this.bot.telegram.sendMessage(
+      chatId,
+      `${msg}\n${this.getCourseMessage(courses)}`
+    )
+
+    return true
   }
 
   private async registerCommands() {
@@ -49,51 +81,51 @@ export class BotService {
     this.bot.command('unlisten', async ctx => {
       await ctx.replyWithSticker(STIKERS.UNLISTEN)
       await ctx.reply(MESSAGES.UNLISTEN)
-      await this.chatsService.createChat({
-        id: ctx.chat!.id
-      })
-    })
-
-    this.bot.on('sticker', ctx => {
-      console.log('sticker', ctx.message)
+      await this.chatsService.deleteChat(ctx.chat!.id)
     })
   }
 
   private async sendCourse(ctx: ContextMessageUpdate) {
-    const {
-      purchaseCourse,
-      sellingCourse
-    } = await this.parserService.parseCourse()
-    await ctx.reply(
-      `Курс доллара к гривне на межбанке:\n\nПокупка: *${purchaseCourse.text}*\nПродажа: *${sellingCourse.text}*`,
-      {
-        parse_mode: 'Markdown'
-      }
-    )
+    const courses = await this.courseService.getCourses()
+    await ctx.reply(this.getCourseMessage(courses), {
+      parse_mode: 'Markdown'
+    })
   }
 
   private async sendSadCourse(ctx: ContextMessageUpdate) {
-    const { purchaseCourse } = await this.parserService.parseCourse()
+    const { purchase } = await this.courseService.getCourses()
     await ctx.reply(
-      `SAD КУРС ДОЛЛАРА К ГРИВНЕ: *${this.getSadCourse(purchaseCourse.value)}*`,
+      `SAD КУРС ДОЛЛАРА К ГРИВНЕ: *${this.getSadCourse(purchase.value)}*`,
       {
         parse_mode: 'Markdown'
       }
     )
   }
 
+  private getCourseMessage(courses: Courses) {
+    return `Курс доллара к гривне на межбанке:\nПокупка: *${courses.purchase.text}*\nПродажа: *${courses.selling.text}*`
+  }
+
   private getSadCourse(course: number) {
-    return round(course * 0.95, -1)
+    const sadCourse = course - course * SAD_COURSE_RATIO
+    const truncedSadCourse = Math.trunc(sadCourse)
+    const sadCourseWithDelta = truncedSadCourse + SAD_COURSE_DELTA
+    return sadCourseWithDelta > sadCourse
+      ? truncedSadCourse
+      : sadCourseWithDelta
   }
 }
 
 const MESSAGES = {
   START:
     'Добро Пожаловать! Этот бот предоставляет функционал отслеживания и нотификации ' +
-    'изменений курса доллара к гривне. Так же можно посмотреть Sad Course и понять ' +
+    'изменений курса доллара к гривне на межбанке. Так же можно посмотреть Sad Course и понять ' +
     'что у вас не так уж все и плохо.',
-  LISTEN: 'Вы подписались на нотификации изменения курса доллара к гривне.',
-  UNLISTEN: 'Вы отписались от нотификаций изменения курса доллара к гривне.'
+  LISTEN:
+    'Вы подписались на нотификации изменения курса доллара к гривне. Если курс будет меняться, то Вам прийдет оповещение.',
+  UNLISTEN: 'Вы отписались от нотификаций изменения курса доллара к гривне.',
+  COURSE_UP: 'Поздравляю!',
+  COURSE_DOWN: 'Cожалею о вашей утрате.'
 }
 
 const STIKERS = {
@@ -106,24 +138,9 @@ const STIKERS = {
   LISTEN:
     'CAACAgIAAxkBAAMmXjQplWkO5v1X8nUM2is4hcUVAaUAAvsJAAJTsfcD8uP620C8f0UYBA',
   UNLISTEN:
-    'CAACAgIAAxkBAAMlXjQpXAx4UKeji_L0c0xBtgv6XMgAAqcFAAJTsfcDnPoEnyQmCa4YBA'
-}
-
-function round(value: number | string[], exp: number) {
-  if (typeof exp === 'undefined' || exp === 0) {
-    return Math.round(value as number)
-  }
-
-  value = +value
-  exp = +exp
-
-  if (isNaN(value) || !(typeof exp === 'number' && exp % 1 === 0)) {
-    return NaN
-  }
-
-  value = value.toString().split('e')
-  value = Math.round(+(value[0] + 'e' + (value[1] ? +value[1] - exp : -exp)))
-
-  value = value.toString().split('e')
-  return +(value[0] + 'e' + (value[1] ? +value[1] + exp : exp))
+    'CAACAgIAAxkBAAMlXjQpXAx4UKeji_L0c0xBtgv6XMgAAqcFAAJTsfcDnPoEnyQmCa4YBA',
+  COURSE_UP:
+    'CAACAgIAAxkBAAIBA145ZI75baV2doze_nnpkD8ivHyyAAKjBQACU7H3Axx0w7NtgkXrGAQ',
+  COURSE_DOWN:
+    'CAACAgIAAxkBAAIBBF45ZQm0l9fGJn05oNj1lzbohonqAAKpBQACU7H3AyGoLW0uy3YnGAQ'
 }

@@ -1,11 +1,11 @@
 import { Module, OnModuleInit } from '@nestjs/common'
-import { ConfigModule, ConfigService } from '@nestjs/config'
+import { ConfigModule } from '@nestjs/config'
 import { ChatsModule } from 'src/chats'
-import { ParserModule } from 'src/parser'
+import { CourseModule } from 'src/course'
 import { BotService } from './bot.service'
 
 @Module({
-  imports: [ConfigModule, ChatsModule, ParserModule],
+  imports: [ConfigModule, ChatsModule, CourseModule],
   providers: [BotService],
   exports: [BotService]
 })

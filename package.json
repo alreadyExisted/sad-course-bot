@@ -46,5 +46,11 @@
     "tsconfig-paths": "^3.9.0",
     "tslint": "^5.20.0",
     "typescript": "^3.7.5"
-  }
+  },
+  "keywords": [
+    "telegram bot",
+    "nestjs",
+    "parsing",
+    "minfin"
+  ]
 }

@@ -5,7 +5,7 @@ import { CacheService } from 'src/cache'
 import { Chat } from '../interfaces'
 import { CreateChatDTO } from '../dtos'
 
-const CHATS_TTL = 60 * 60 * 24 // day
+const CHATS_CACHE_TTL = 60 * 60 * 24 // day
 
 @Injectable()
 export class ChatsService {
@@ -24,7 +24,7 @@ export class ChatsService {
 
     if (!chat) {
       await this.cacheService.set('chats', [...(chats || []), input], {
-        ttl: CHATS_TTL
+        ttl: CHATS_CACHE_TTL
       })
       const chatModel = new this.chatsModel(input)
       await chatModel.save()

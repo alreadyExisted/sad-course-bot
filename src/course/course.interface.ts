@@ -3,6 +3,12 @@ export interface Course {
   text: string
 }
 
+export interface Courses {
+  purchase: Course
+  selling: Course
+  status: CourseStatus
+}
+
 export enum CourseStatus {
   None,
   Up,
