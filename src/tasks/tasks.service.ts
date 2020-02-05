@@ -18,7 +18,7 @@ export class TasksService {
     this.logger = new Logger(TasksService.name)
   }
 
-  @Cron('0 * 10-17 * * 1-5')
+  @Cron('0 0 10-17 * * 1-5')
   async checkCourseChanges() {
     const courses = await this.parserService.parseCourse()
     const storedCourses = await this.courseService.setCourses(courses)
