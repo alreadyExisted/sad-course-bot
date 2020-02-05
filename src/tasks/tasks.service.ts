@@ -18,7 +18,7 @@ export class TasksService {
     this.logger = new Logger(TasksService.name)
   }
 
-  @Cron('0 * 10-17 * 1-5')
+  @Cron('0 * 10-17 * * 1-5')
   async checkCourseChanges() {
     const courses = await this.parserService.parseCourse()
     const storedCourses = await this.courseService.setCourses(courses)
@@ -29,7 +29,7 @@ export class TasksService {
         .then(isNotificated => {
           this.logger.debug(
             isNotificated
-              ? `Sended notification about courses`
+              ? `Sended notification about courses to chat: ${id}`
               : 'Course not changed'
           )
         })
