@@ -1,7 +1,6 @@
 import { Injectable, HttpService } from '@nestjs/common'
 import cheerio from 'cheerio'
 import { ConfigService } from '@nestjs/config'
-import { Courses } from 'src/course'
 
 @Injectable()
 export class ParserService {
@@ -10,7 +9,7 @@ export class ParserService {
     private configService: ConfigService
   ) {}
 
-  async parseCourse(): Promise<Omit<Courses, 'status'>> {
+  async parseCourse() {
     const url = this.configService.get<string>('PARSING_SITE_URL')!
     const { data } = await this.httpService.get<string>(url).toPromise()
 
@@ -19,22 +18,35 @@ export class ParserService {
     const purchaseNode = $(
       '.mb-table-currency tr:nth-child(1) td[data-title="Доллар"]'
     ).text()
-    const [purchaseText] = purchaseNode.split('\n')
+    const [purchaseText, purchaseDeltaText] = purchaseNode.split('\n')
 
     const sellingNode = $(
       '.mb-table-currency tr:nth-child(2) td[data-title="Доллар"]'
     ).text()
-    const [sellingText] = sellingNode.split('\n')
+    const [sellingText, sellingDeltaText] = sellingNode.split('\n')
 
     return {
       purchase: {
-        text: purchaseText,
-        value: parseFloat(purchaseText)
+        value: purchaseText,
+        delta: purchaseDeltaText,
+        deltaValue: parseFloat(purchaseDeltaText)
       },
       selling: {
-        text: sellingText,
-        value: parseFloat(sellingText)
+        value: sellingText,
+        delta: sellingDeltaText,
+        deltaValue: parseFloat(sellingDeltaText)
       }
     }
   }
+}
+
+interface Course {
+  value: string
+  delta: string
+  deltaValue: number
+}
+
+export interface Courses {
+  purchase: Course
+  selling: Course
 }

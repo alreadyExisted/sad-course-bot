@@ -2,7 +2,7 @@ import { Injectable, Logger } from '@nestjs/common'
 import { ConfigService } from '@nestjs/config'
 import TelegramBot, { ContextMessageUpdate } from 'telegraf'
 import { ChatsService } from 'src/chats'
-import { CourseService, Courses, CourseStatus } from 'src/course'
+import { ParserService, Courses } from 'src/parser'
 
 const SAD_COURSE_RATIO = 0.07
 const SAD_COURSE_DELTA = 0.5
@@ -14,7 +14,7 @@ export class BotService {
 
   constructor(
     private configService: ConfigService,
-    private courseService: CourseService,
+    private parserService: ParserService,
     private chatsService: ChatsService
   ) {
     this.logger = new Logger(BotService.name)
@@ -28,30 +28,19 @@ export class BotService {
     this.bot.launch().then(() => this.logger.debug('Init bot client'))
   }
 
-  async sendNotification(chatId: number, courses: Courses) {
-    if (courses.status === CourseStatus.None) {
-      return false
-    }
-
-    let stickerId: string
-    let msg: string
-
-    switch (courses.status) {
-      case CourseStatus.Up:
-        stickerId = STIKERS.COURSE_UP
-        msg = MESSAGES.COURSE_UP
-      case CourseStatus.Down:
-        stickerId = STIKERS.COURSE_DOWN
-        msg = MESSAGES.COURSE_DOWN
-    }
-
-    await this.bot.telegram.sendSticker(chatId, stickerId)
+  async sendNotification(chatId: number, { purchase, selling }: Courses) {
+    await this.bot.telegram.sendSticker(chatId, STIKERS.COURSE_CHANGE)
     await this.bot.telegram.sendMessage(
       chatId,
-      `${msg}\n${this.getCourseMessage(courses)}`
+      MESSAGES.COURSE +
+        `\nПокупка: *${purchase.value}* ${this.getArrow(purchase.delta)} ${
+          purchase.delta
+        }` +
+        `\nПродажа: *${selling.value}* ${this.getArrow(selling.delta)} ${
+          selling.delta
+        }`,
+      { parse_mode: 'Markdown' }
     )
-
-    return true
   }
 
   private async registerCommands() {
@@ -86,24 +75,25 @@ export class BotService {
   }
 
   private async sendCourse(ctx: ContextMessageUpdate) {
-    const courses = await this.courseService.getCourses()
-    await ctx.reply(this.getCourseMessage(courses), {
-      parse_mode: 'Markdown'
-    })
-  }
-
-  private async sendSadCourse(ctx: ContextMessageUpdate) {
-    const { purchase } = await this.courseService.getCourses()
+    const { purchase, selling } = await this.parserService.parseCourse()
     await ctx.reply(
-      `SAD КУРС ДОЛЛАРА К ГРИВНЕ: *${this.getSadCourse(purchase.value)}*`,
+      `Курс доллара к гривне на межбанке:\nПокупка: *${purchase.value}*\nПродажа: *${selling.value}*`,
       {
         parse_mode: 'Markdown'
       }
     )
   }
 
-  private getCourseMessage(courses: Courses) {
-    return `Курс доллара к гривне на межбанке:\nПокупка: *${courses.purchase.text}*\nПродажа: *${courses.selling.text}*`
+  private async sendSadCourse(ctx: ContextMessageUpdate) {
+    const { purchase } = await this.parserService.parseCourse()
+    await ctx.reply(
+      `SAD КУРС ДОЛЛАРА К ГРИВНЕ: *${this.getSadCourse(
+        parseFloat(purchase.value)
+      )}*`,
+      {
+        parse_mode: 'Markdown'
+      }
+    )
   }
 
   private getSadCourse(course: number) {
@@ -113,6 +103,16 @@ export class BotService {
     return sadCourseWithDelta > sadCourse
       ? truncedSadCourse
       : sadCourseWithDelta
+  }
+
+  private getArrow(value: string) {
+    const delta = parseFloat(value)
+
+    if (delta === 0) {
+      return ''
+    }
+
+    return delta > 0 ? '⬆' : '⬇'
   }
 }
 
@@ -124,8 +124,7 @@ const MESSAGES = {
   LISTEN:
     'Вы подписались на нотификации изменения курса доллара к гривне. Если курс будет меняться, то Вам прийдет оповещение.',
   UNLISTEN: 'Вы отписались от нотификаций изменения курса доллара к гривне.',
-  COURSE_UP: 'Поздравляю!',
-  COURSE_DOWN: 'Cожалею о вашей утрате.'
+  COURSE: 'Изменения курса подъехали:'
 }
 
 const STIKERS = {
@@ -139,8 +138,6 @@ const STIKERS = {
     'CAACAgIAAxkBAAMmXjQplWkO5v1X8nUM2is4hcUVAaUAAvsJAAJTsfcD8uP620C8f0UYBA',
   UNLISTEN:
     'CAACAgIAAxkBAAMlXjQpXAx4UKeji_L0c0xBtgv6XMgAAqcFAAJTsfcDnPoEnyQmCa4YBA',
-  COURSE_UP:
-    'CAACAgIAAxkBAAIBA145ZI75baV2doze_nnpkD8ivHyyAAKjBQACU7H3Axx0w7NtgkXrGAQ',
-  COURSE_DOWN:
-    'CAACAgIAAxkBAAIBBF45ZQm0l9fGJn05oNj1lzbohonqAAKpBQACU7H3AyGoLW0uy3YnGAQ'
+  COURSE_CHANGE:
+    'CAACAgIAAxkBAAIBA145ZI75baV2doze_nnpkD8ivHyyAAKjBQACU7H3Axx0w7NtgkXrGAQ'
 }
