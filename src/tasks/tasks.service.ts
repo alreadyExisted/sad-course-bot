@@ -21,14 +21,15 @@ export class TasksService {
     const courses = await this.parserService.parseCourse()
     const chats = await this.chatsService.getChats()
 
-    if (courses.purchase.deltaValue !== 0 && courses.selling.deltaValue !== 0) {
-      chats.forEach(({ id }) => {
-        this.botService.sendNotification(id, courses).then(() => {
-          this.logger.debug(`Sended notification about courses to chat: ${id}`)
-        })
-      })
-    } else {
+    if (courses.purchase.deltaValue === 0 && courses.selling.deltaValue === 0) {
       this.logger.debug('Course not changed')
+      return
     }
+
+    chats.forEach(({ id }) => {
+      this.botService.sendNotification(id, courses).then(() => {
+        this.logger.debug(`Sended notification about courses to chat: ${id}`)
+      })
+    })
   }
 }
