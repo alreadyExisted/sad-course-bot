@@ -1,8 +1,9 @@
-import { Injectable, Logger } from '@nestjs/common'
+import { Injectable, Logger, HttpService } from '@nestjs/common'
 import { Cron } from '@nestjs/schedule'
 import { BotService } from 'src/bot'
 import { ParserService } from 'src/parser'
 import { ChatsService } from 'src/chats'
+import { ConfigService } from '@nestjs/config'
 
 @Injectable()
 export class TasksService {
@@ -11,9 +12,16 @@ export class TasksService {
   constructor(
     private botService: BotService,
     private parserService: ParserService,
-    private chatsService: ChatsService
+    private chatsService: ChatsService,
+    private httpService: HttpService,
+    private configService: ConfigService
   ) {
     this.logger = new Logger(TasksService.name)
+  }
+
+  @Cron('* */20 * * * *')
+  callSelf() {
+    this.httpService.get(this.configService.get('HOST')!).subscribe(() => this.logger.debug('Call self'))
   }
 
   @Cron('30 0 10-17 * * 1-5')
